@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -646,21 +647,44 @@
       padding: 7px 14px; cursor: pointer; transition: var(--transition);
     }
     .btn-modal-close:hover { border-color: var(--text-muted); color: var(--text); }
-    .modal-iframe-wrap { flex: 1; position: relative; min-height: 0; background: #f5f5f5; }
-    .modal-iframe-wrap iframe { width: 100%; height: 100%; border: none; display: block; min-height: 560px; }
+    .modal-diagram-wrap {
+      flex: 1; overflow: auto; min-height: 0;
+      background: var(--surface2);
+      display: flex; align-items: flex-start; justify-content: center;
+      padding: 32px 24px;
+    }
+    .modal-diagram-wrap svg {
+      max-width: 100%; height: auto;
+      border-radius: 10px;
+      filter: drop-shadow(0 4px 24px rgba(0,0,0,0.3));
+    }
+    [data-theme="light"] .modal-diagram-wrap { background: #f0f0f6; }
     .modal-loader {
-      position: absolute; inset: 0;
+      flex: 1;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      background: #f5f5f5; gap: 12px;
-      font-size: 13px; color: #888; font-family: var(--font);
+      gap: 14px; font-size: 13px; color: var(--text-muted); font-family: var(--font);
     }
     .modal-loader .ml-spinner {
-      width: 30px; height: 30px;
+      width: 32px; height: 32px;
       border: 3px solid rgba(255,171,64,0.2); border-top-color: var(--orange);
       border-radius: 50%; animation: spin 0.7s linear infinite;
     }
     .modal-loader.hidden { display: none; }
+    .modal-diagram-error {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 10px; padding: 32px; text-align: center;
+    }
+    .modal-diagram-error .err-icon { font-size: 32px; }
+    .modal-diagram-error p { color: var(--red); font-size: 14px; max-width: 400px; }
+    .modal-diagram-error .err-code {
+      font-family: var(--mono); font-size: 11px; color: var(--text-faint);
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 12px; max-width: 500px;
+      white-space: pre-wrap; word-break: break-all; text-align: left;
+    }
+    .modal-diagram-error.hidden { display: none; }
   </style>
 </head>
 <body>
@@ -787,10 +811,10 @@
       </div>
       <div class="output-actions">
         <button class="btn-sm primary-sm" onclick="copyMarkdown()">⬇ Copy as Markdown</button>
-        <button class="btn-drawio" id="drawioBtn" onclick="exportDrawio()">
+        <button class="btn-drawio" id="drawioBtn" onclick="generateDiagram()">
           <div class="dspinner"></div>
-          <span class="dbtn-icon">⬡</span>
-          <span id="dioBtnLabel">Export as Draw.io</span>
+          <span class="dbtn-icon">◈</span>
+          <span id="dioBtnLabel">Generate Diagram</span>
         </button>
         <button class="btn-sm" onclick="startNew()">↺ Start new spec</button>
       </div>
@@ -806,22 +830,25 @@
   <div class="modal">
     <div class="modal-header">
       <div class="modal-title">
-        <div class="modal-title-icon">⬡</div>
-        Draw.io Diagram Preview
+        <div class="modal-title-icon">◈</div>
+        Diagram Preview
       </div>
       <div class="modal-actions">
-        <button class="btn-modal-open" onclick="openInDrawio()">↗ Open in Draw.io</button>
-        <button class="btn-modal-dl" onclick="downloadCurrentDiagram()">⬇ Download .drawio</button>
+        <button class="btn-modal-open" onclick="exportSVG()">⬇ Export SVG</button>
+        <button class="btn-modal-dl" onclick="exportPNG()">⬇ Export PNG</button>
         <button class="btn-modal-close" onclick="closePreview()">✕ Close</button>
       </div>
     </div>
-    <div class="modal-iframe-wrap">
-      <div class="modal-loader" id="modalLoader">
-        <div class="ml-spinner"></div>
-        <span>Loading diagram preview…</span>
-      </div>
-      <iframe id="previewFrame" title="Draw.io diagram preview"></iframe>
+    <div class="modal-loader" id="modalLoader">
+      <div class="ml-spinner"></div>
+      <span>Rendering diagram…</span>
     </div>
+    <div class="modal-diagram-error hidden" id="modalDiagramError">
+      <div class="err-icon">⚠️</div>
+      <p id="modalDiagramErrorMsg">Could not render the diagram.</p>
+      <pre class="err-code" id="modalDiagramErrorCode"></pre>
+    </div>
+    <div class="modal-diagram-wrap hidden" id="diagramWrap"></div>
   </div>
 </div>
 
@@ -840,6 +867,7 @@
     const next = current === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('psg-theme', next);
+    applyMermaidTheme();
   }
 
   // ── Provider config ──
@@ -1098,8 +1126,42 @@ Return ONLY valid JSON. No markdown fences, no extra text.`;
     el.addEventListener('keydown', e => { if (e.key === 'Enter') generatePRD(); });
   });
 
-  // ── Export as Draw.io ──
-  async function exportDrawio() {
+  // ── Mermaid init ──
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'dark',
+    themeVariables: {
+      primaryColor: '#1a1a25',
+      primaryTextColor: '#eeeef5',
+      primaryBorderColor: '#c8f060',
+      lineColor: '#888899',
+      secondaryColor: '#22222f',
+      tertiaryColor: '#12121a',
+      background: '#0a0a0f',
+      mainBkg: '#1a1a25',
+      nodeBorder: '#2a2a3a',
+      clusterBkg: '#12121a',
+      titleColor: '#eeeef5',
+      edgeLabelBackground: '#1a1a25',
+      fontFamily: 'DM Sans, sans-serif',
+    },
+    flowchart: { curve: 'basis', htmlLabels: true },
+    securityLevel: 'loose',
+  });
+
+  // Re-apply correct theme when user switches light/dark
+  function applyMermaidTheme() {
+    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: isLight ? 'default' : 'dark',
+      securityLevel: 'loose',
+      flowchart: { curve: 'basis', htmlLabels: true },
+    });
+  }
+
+  // ── Generate Diagram (Mermaid) ──
+  async function generateDiagram() {
     if (!window._lastPRD) return;
     if (!document.getElementById('apiKey').value.trim()) { showDiagramError('Please enter your API key above.'); return; }
     const btn = document.getElementById('drawioBtn');
@@ -1107,119 +1169,160 @@ Return ONLY valid JSON. No markdown fences, no extra text.`;
     document.getElementById('diagramError').classList.remove('visible');
     btn.disabled = true;
     btn.classList.add('loading');
-    lbl.textContent = 'Generating diagram…';
+    lbl.textContent = 'Generating…';
     const { data, meta } = window._lastPRD;
-    const prompt = `You are a draw.io XML expert. Generate a draw.io diagram XML for this product feature.
+
+    const prompt = `You are a Mermaid.js diagram expert. Generate a Mermaid flowchart for this product feature PRD.
 
 Feature: ${meta.featureIdea}
 Product type: ${meta.productType}
 Target users: ${meta.targetUsers || 'Not specified'}
+Problem: ${data.problem || ''}
+Solution: ${data.solution || ''}
+User Stories: ${(data.stories||[]).map((s,i)=>`Story ${i+1}: ${s.result}`).join(' | ')}
+Timeline: ${data.timeline || ''}
+Risks: ${(data.risks||[]).slice(0,3).join(' | ')}
+Metrics: ${(data.metrics||[]).map(m=>`${m.metric}`).join(', ')}
 
-PRD Summary:
-- Problem: ${data.problem || ''}
-- Solution: ${data.solution || ''}
-- User Stories: ${(data.stories||[]).map((s,i)=>`Story ${i+1}: ${s.situation} — ${s.result}`).join('; ')}
-- Acceptance Criteria: ${(data.acceptance||[]).join('; ')}
-- Timeline: ${data.timeline || ''}
-- Risks: ${(data.risks||[]).join('; ')}
-- Success Metrics: ${(data.metrics||[]).map(m=>`${m.metric} (${m.priority})`).join(', ')}
+Create a top-down flowchart (flowchart TD) with these sections connected by arrows:
+1. TITLE node — feature name
+2. PROBLEM node — 1-sentence problem
+3. SOLUTION node — 1-sentence solution
+4. STORIES node group — one node per user story (max 4), short label
+5. PHASES node group — one node per timeline phase (max 4), short label
+6. RISKS node — bullet list of top 3 risks (use <br/> between items)
+7. METRICS node — bullet list of top metrics (use <br/> between items)
 
-Create a clear feature flow diagram that shows:
-1. A title block at the top with the feature name
-2. A "Problem" box
-3. A "Proposed Solution" box
-4. User stories as individual rounded boxes in a row (Story 1, Story 2 etc. with a 1-line summary each)
-5. Timeline phases as sequential boxes connected with arrows
-6. A "Key Risks" box at the bottom
-7. A "Success Metrics" box at the bottom
+STRICT RULES you must follow:
+- Start your response with: flowchart TD
+- Node IDs: TITLE, PROB, SOL, S1, S2, S3, S4, PH1, PH2, PH3, PH4, RISKS, METRICS
+- Labels: use double quotes, e.g. TITLE["My Feature"]
+- Keep each label under 45 chars per line; use <br/> for line breaks within a label
+- Never use these characters inside labels: { } ( ) [ ] " # & < >  — rephrase instead
+- Arrows: use --> between nodes
+- After all nodes/edges, add classDef and class lines:
+  classDef titleStyle fill:#c8f060,color:#0d0d0d,stroke:#a8d040,font-weight:bold,font-size:14px
+  classDef problemStyle fill:#ff6b6b,color:#fff,stroke:#dd4444
+  classDef solutionStyle fill:#4ade80,color:#0d0d0d,stroke:#22c55e
+  classDef storyStyle fill:#3b4a6b,color:#bfdbfe,stroke:#60a5fa,rx:8
+  classDef phaseStyle fill:#2d1f6e,color:#c4b5fd,stroke:#7c3aed
+  classDef riskStyle fill:#3a2a1a,color:#fde68a,stroke:#f59e0b
+  classDef metricStyle fill:#14432a,color:#86efac,stroke:#16a34a
+  class TITLE titleStyle
+  class PROB problemStyle
+  class SOL solutionStyle
+  class S1,S2,S3,S4 storyStyle
+  class PH1,PH2,PH3,PH4 phaseStyle
+  class RISKS riskStyle
+  class METRICS metricStyle
 
-Styling:
-- Title: fillColor=#c8f060;fontColor=#0d0d0d;strokeColor=#a8d040;fontStyle=1;fontSize=14
-- Problem: fillColor=#ff6b6b;fontColor=#fff;strokeColor=#dd4444
-- Solution: fillColor=#4CAF50;fontColor=#fff;strokeColor=#388E3C
-- Stories: fillColor=#1c1c1c;fontColor=#e8e8e8;strokeColor=#444;rounded=1
-- Timeline phases: fillColor=#1a2a3a;fontColor=#7eb8f7;strokeColor=#2a4a6a
-- Risks: fillColor=#3a2a1a;fontColor=#ffd166;strokeColor=#6a4a1a
-- Metrics: fillColor=#1a3a2a;fontColor=#c8f060;strokeColor=#2a6a4a
-- Page: pageWidth=1654;pageHeight=1169
-- All boxes: shadow=1;fontSize=12;whiteSpace=wrap;html=1
-- Arrows: edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#555
-
-Return ONLY the raw draw.io XML starting with <mxfile and ending with </mxfile>. No markdown, no explanation.`;
+Return ONLY the Mermaid code. No markdown fences, no explanation, no extra text.`;
 
     try {
-      let xml = await callAI(prompt, 8000);
-      // Strip markdown fences if present
-      xml = xml.replace(/^```[^\n]*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
-      // Extract just the <mxfile>...</mxfile> block in case there's surrounding text
-      const mxMatch = xml.match(/<mxfile[\s\S]*<\/mxfile>/);
-      if (mxMatch) xml = mxMatch[0];
-      if (!xml.includes('<mxfile') || !xml.includes('mxCell'))
-        throw new Error('The model did not return valid draw.io XML. Try a more capable model (e.g. Llama 3.3 70B or Claude Sonnet).');
-      const slug = (meta.featureIdea || 'diagram').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
-      window._currentDiagram = { xml, filename: `${slug}.drawio` };
-      openPreview(xml);
+      let code = await callAI(prompt, 3000);
+      // Strip markdown fences if model added them
+      code = code.replace(/^```[^\n]*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
+      // Must start with flowchart
+      if (!code.startsWith('flowchart')) {
+        const match = code.match(/flowchart[\s\S]+/);
+        if (!match) throw new Error('Model did not return valid Mermaid syntax. Try a more capable model.');
+        code = match[0].trim();
+      }
+      window._currentDiagram = { code, slug: (meta.featureIdea||'diagram').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,48) };
+      await openPreview(code);
     } catch (err) {
       showDiagramError(err.message || 'Could not generate the diagram. Please try again.');
     } finally {
       btn.disabled = false;
       btn.classList.remove('loading');
-      lbl.textContent = 'Export as Draw.io';
+      lbl.textContent = 'Generate Diagram';
     }
   }
 
-  // ── Preview modal ──
-  // viewer.diagrams.net supports ?xml=<encoded> directly in the URL — no postMessage needed.
-  function openPreview(xml) {
-    const modal  = document.getElementById('previewModal');
-    const loader = document.getElementById('modalLoader');
-    const iframe = document.getElementById('previewFrame');
+  // ── Preview modal (Mermaid) ──
+  async function openPreview(code) {
+    const modal   = document.getElementById('previewModal');
+    const loader  = document.getElementById('modalLoader');
+    const wrap    = document.getElementById('diagramWrap');
+    const errBox  = document.getElementById('modalDiagramError');
 
     modal.classList.add('open');
     loader.classList.remove('hidden');
-    iframe.src = '';
+    wrap.classList.add('hidden');
+    errBox.classList.add('hidden');
+    wrap.innerHTML = '';
 
-    // Build the viewer URL with the XML embedded
-    const viewerUrl = 'https://viewer.diagrams.net/?toolbar=0&nav=1&xml=' + encodeURIComponent(xml);
+    applyMermaidTheme();
 
-    iframe.onload = () => loader.classList.add('hidden');
-    iframe.src = viewerUrl;
-
-    // Fallback hide if onload doesn't fire (e.g. cross-origin restrictions)
-    setTimeout(() => loader.classList.add('hidden'), 10000);
+    try {
+      const id = 'mermaid-render-' + Date.now();
+      const { svg } = await mermaid.render(id, code);
+      wrap.innerHTML = svg;
+      // Make SVG responsive
+      const svgEl = wrap.querySelector('svg');
+      if (svgEl) { svgEl.style.maxWidth = '100%'; svgEl.removeAttribute('height'); }
+      loader.classList.add('hidden');
+      wrap.classList.remove('hidden');
+    } catch (err) {
+      loader.classList.add('hidden');
+      document.getElementById('modalDiagramErrorMsg').textContent = 'Mermaid render failed — the model may have produced invalid syntax.';
+      document.getElementById('modalDiagramErrorCode').textContent = err.message || String(err);
+      errBox.classList.remove('hidden');
+    }
   }
 
   function closePreview() {
     document.getElementById('previewModal').classList.remove('open');
-    setTimeout(() => { document.getElementById('previewFrame').src = ''; }, 300);
   }
 
   function handleBackdropClick(e) {
     if (e.target === document.getElementById('previewModal')) closePreview();
   }
 
-  // ── Open in Draw.io ──
-  function openInDrawio() {
-    if (!window._currentDiagram) return;
-    const { xml } = window._currentDiagram;
-    // app.diagrams.net opens the XML in the full editor
-    window.open('https://app.diagrams.net/?xml=' + encodeURIComponent(xml), '_blank', 'noopener');
+  // ── Export SVG ──
+  function exportSVG() {
+    const svgEl = document.querySelector('#diagramWrap svg');
+    if (!svgEl) return;
+    const slug = window._currentDiagram?.slug || 'diagram';
+    const svgStr = new XMLSerializer().serializeToString(svgEl);
+    downloadFile('<?xml version="1.0" encoding="UTF-8"?>\n' + svgStr, `${slug}.svg`, 'image/svg+xml');
+    showToast('⬇', 'SVG downloaded!');
   }
 
-  function downloadCurrentDiagram() {
-    if (!window._currentDiagram) return;
-    const { xml, filename } = window._currentDiagram;
-    downloadFile(xml, filename, 'application/xml');
-    showToast('⬇', 'Draw.io file downloaded!');
+  // ── Export PNG ──
+  function exportPNG() {
+    const svgEl = document.querySelector('#diagramWrap svg');
+    if (!svgEl) return;
+    const slug = window._currentDiagram?.slug || 'diagram';
+    const svgStr = new XMLSerializer().serializeToString(svgEl);
+    const bbox = svgEl.getBoundingClientRect();
+    const scale = 2; // retina
+    const w = Math.max(bbox.width, 800) * scale;
+    const h = Math.max(bbox.height, 400) * scale;
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.onload = () => {
+      ctx.fillStyle = document.documentElement.getAttribute('data-theme') === 'light' ? '#f0f0f6' : '#1a1a25';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      downloadFile(canvas.toDataURL('image/png'), `${slug}.png`, 'image/png');
+      showToast('⬇', 'PNG downloaded!');
+    };
+    img.onerror = () => showToast('⚠', 'PNG export failed — try SVG instead.');
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
   }
 
   function downloadFile(content, filename, mimeType) {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
+    // content can be a data URL (from canvas) or raw string
+    const isDataUrl = typeof content === 'string' && content.startsWith('data:');
+    const url = isDataUrl ? content : URL.createObjectURL(new Blob([content], { type: mimeType }));
     const a = document.createElement('a');
     a.href = url; a.download = filename;
     document.body.appendChild(a); a.click();
-    document.body.removeChild(a); URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    if (!isDataUrl) URL.revokeObjectURL(url);
   }
 
   function showDiagramError(msg) {
