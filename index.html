@@ -1149,9 +1149,13 @@ Return ONLY the raw draw.io XML starting with <mxfile and ending with </mxfile>.
 
     try {
       let xml = await callAI(prompt, 8000);
+      // Strip markdown fences if present
       xml = xml.replace(/^```[^\n]*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
+      // Extract just the <mxfile>...</mxfile> block in case there's surrounding text
+      const mxMatch = xml.match(/<mxfile[\s\S]*<\/mxfile>/);
+      if (mxMatch) xml = mxMatch[0];
       if (!xml.includes('<mxfile') || !xml.includes('mxCell'))
-        throw new Error('The diagram response was not valid draw.io XML. Please try again.');
+        throw new Error('The model did not return valid draw.io XML. Try a more capable model (e.g. Llama 3.3 70B or Claude Sonnet).');
       const slug = (meta.featureIdea || 'diagram').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
       window._currentDiagram = { xml, filename: `${slug}.drawio` };
       openPreview(xml);
@@ -1165,29 +1169,24 @@ Return ONLY the raw draw.io XML starting with <mxfile and ending with </mxfile>.
   }
 
   // ── Preview modal ──
+  // viewer.diagrams.net supports ?xml=<encoded> directly in the URL — no postMessage needed.
   function openPreview(xml) {
     const modal  = document.getElementById('previewModal');
     const loader = document.getElementById('modalLoader');
     const iframe = document.getElementById('previewFrame');
+
     modal.classList.add('open');
     loader.classList.remove('hidden');
     iframe.src = '';
-    let initReceived = false;
-    function onMsg(e) {
-      if (initReceived) return;
-      try {
-        const msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-        if (msg && msg.event === 'init') {
-          initReceived = true;
-          loader.classList.add('hidden');
-          iframe.contentWindow.postMessage(JSON.stringify({ action: 'load', xml }), 'https://viewer.diagrams.net');
-          window.removeEventListener('message', onMsg);
-        }
-      } catch (_) {}
-    }
-    window.addEventListener('message', onMsg);
-    iframe.src = 'https://viewer.diagrams.net/?spin=1&toolbar=0&chrome=0&nav=0';
-    setTimeout(() => loader.classList.add('hidden'), 8000);
+
+    // Build the viewer URL with the XML embedded
+    const viewerUrl = 'https://viewer.diagrams.net/?toolbar=0&nav=1&xml=' + encodeURIComponent(xml);
+
+    iframe.onload = () => loader.classList.add('hidden');
+    iframe.src = viewerUrl;
+
+    // Fallback hide if onload doesn't fire (e.g. cross-origin restrictions)
+    setTimeout(() => loader.classList.add('hidden'), 10000);
   }
 
   function closePreview() {
@@ -1203,24 +1202,8 @@ Return ONLY the raw draw.io XML starting with <mxfile and ending with </mxfile>.
   function openInDrawio() {
     if (!window._currentDiagram) return;
     const { xml } = window._currentDiagram;
-    const encoded = encodeURIComponent(xml);
-    const url = `https://app.diagrams.net/?xml=${encoded}`;
-    // If URL might be too long (>2000 chars), fall back to downloading and showing a hint
-    if (url.length > 80000) {
-      // Use a hidden form POST trick for very large diagrams
-      const form = document.createElement('form');
-      form.method = 'POST';
-      form.action = 'https://app.diagrams.net/';
-      form.target = '_blank';
-      const input = document.createElement('input');
-      input.type = 'hidden'; input.name = 'xml'; input.value = xml;
-      form.appendChild(input);
-      document.body.appendChild(form);
-      form.submit();
-      document.body.removeChild(form);
-    } else {
-      window.open(url, '_blank', 'noopener');
-    }
+    // app.diagrams.net opens the XML in the full editor
+    window.open('https://app.diagrams.net/?xml=' + encodeURIComponent(xml), '_blank', 'noopener');
   }
 
   function downloadCurrentDiagram() {
