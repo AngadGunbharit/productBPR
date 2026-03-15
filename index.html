@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Product Spec Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0d0d;
+      --surface: #151515;
+      --surface2: #1c1c1c;
+      --border: #2a2a2a;
+      --border-focus: #c8f060;
+      --accent: #c8f060;
+      --accent-dim: rgba(200, 240, 96, 0.12);
+      --text: #e8e8e8;
+      --text-muted: #888;
+      --text-faint: #555;
+      --red: #ff6b6b;
+      --yellow: #ffd166;
+      --green: #c8f060;
+      --font: 'DM Sans', sans-serif;
+      --mono: 'DM Mono', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ── */
+    .page {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    /* ── Header ── */
+    .header {
+      margin-bottom: 48px;
+    }
+    .header-tag {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid rgba(200, 240, 96, 0.25);
+      padding: 3px 10px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: clamp(28px, 5vw, 42px);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin-bottom: 10px;
+    }
+    h1 span { color: var(--accent); }
+    .header-sub {
+      color: var(--text-muted);
+      font-size: 15px;
+    }
+
+    /* ── API Key Row ── */
+    .api-key-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 32px;
+    }
+    .lock-icon {
+      flex-shrink: 0;
+      width: 30px;
+      height: 30px;
+      background: var(--accent-dim);
+      border: 1px solid rgba(200, 240, 96, 0.2);
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      font-size: 14px;
+    }
+    .api-key-info { flex: 1; min-width: 0; }
+    .api-key-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+    .api-key-input-wrap { position: relative; }
+    .api-key-input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      padding: 7px 36px 7px 10px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .api-key-input:focus { border-color: var(--border-focus); }
+    .api-key-input::placeholder { color: var(--text-faint); }
+    .toggle-vis {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 13px;
+      padding: 2px;
+      line-height: 1;
+    }
+    .toggle-vis:hover { color: var(--text); }
+    .api-key-note {
+      font-size: 11px;
+      color: var(--text-faint);
+      margin-top: 4px;
+    }
+
+    /* ── Form ── */
+    .form-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px;
+      margin-bottom: 28px;
+    }
+    .form-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+      margin-bottom: 20px;
+    }
+    .field { margin-bottom: 18px; }
+    .field:last-of-type { margin-bottom: 0; }
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    label .req { color: var(--accent); margin-left: 3px; }
+    textarea, input[type="text"], select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      padding: 10px 12px;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      appearance: none;
+    }
+    textarea:focus, input[type="text"]:focus, select:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px rgba(200, 240, 96, 0.08);
+    }
+    textarea::placeholder, input::placeholder { color: var(--text-faint); }
+    textarea { resize: vertical; min-height: 100px; }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23666' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+      cursor: pointer;
+    }
+    select option { background: #1c1c1c; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 520px) { .two-col { grid-template-columns: 1fr; } }
+
+    /* ── Generate Button ── */
+    .btn-generate {
+      width: 100%;
+      background: var(--accent);
+      color: #0d0d0d;
+      border: none;
+      border-radius: 10px;
+      font-family: var(--font);
+      font-size: 15px;
+      font-weight: 700;
+      padding: 14px 24px;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      letter-spacing: -0.01em;
+    }
+    .btn-generate:hover:not(:disabled) { opacity: 0.88; }
+    .btn-generate:active:not(:disabled) { transform: scale(0.99); }
+    .btn-generate:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Spinner ── */
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(0,0,0,0.2);
+      border-top-color: #0d0d0d;
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+      display: none;
+    }
+    .generating .spinner { display: block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Error ── */
+    .error-box {
+      background: rgba(255, 107, 107, 0.08);
+      border: 1px solid rgba(255, 107, 107, 0.3);
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: var(--red);
+      font-size: 13px;
+      margin-top: 16px;
+      display: none;
+    }
+    .error-box.visible { display: block; }
+
+    /* ── Output ── */
+    #output { display: none; }
+    #output.visible { display: block; }
+
+    .output-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .output-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .output-actions { display: flex; gap: 8px; }
+
+    .btn-sm {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text-muted);
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 7px 14px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-sm:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+    .btn-sm.primary-sm {
+      background: var(--accent-dim);
+      border-color: rgba(200, 240, 96, 0.3);
+      color: var(--accent);
+    }
+    .btn-sm.primary-sm:hover { background: var(--accent); color: #0d0d0d; border-color: var(--accent); }
+
+    /* ── PRD Sections ── */
+    .prd-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 22px 24px;
+      margin-bottom: 14px;
+    }
+    .prd-section-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .section-icon {
+      width: 28px;
+      height: 28px;
+      background: var(--accent-dim);
+      border: 1px solid rgba(200, 240, 96, 0.2);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    .section-body {
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.75;
+    }
+    .section-body p { margin-bottom: 8px; }
+    .section-body p:last-child { margin-bottom: 0; }
+    .section-body ul, .section-body ol {
+      padding-left: 20px;
+      margin-bottom: 8px;
+    }
+    .section-body li { margin-bottom: 4px; }
+    .section-body strong { color: var(--text); font-weight: 600; }
+    .section-body code {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: var(--accent);
+    }
+
+    /* ── Priority Tags ── */
+    .tag {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: 4px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+    .tag-high { background: rgba(255, 107, 107, 0.15); color: #ff6b6b; border: 1px solid rgba(255,107,107,0.3); }
+    .tag-medium { background: rgba(255, 209, 102, 0.15); color: #ffd166; border: 1px solid rgba(255,209,102,0.3); }
+    .tag-low { background: rgba(200, 240, 96, 0.12); color: #c8f060; border: 1px solid rgba(200,240,96,0.25); }
+
+    /* ── Loading Skeleton ── */
+    #loading-state { display: none; }
+    #loading-state.visible { display: block; }
+    .skeleton-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 22px 24px;
+      margin-bottom: 14px;
+    }
+    .skel {
+      background: linear-gradient(90deg, var(--surface2) 25%, #222 50%, var(--surface2) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s infinite;
+      border-radius: 4px;
+    }
+    .skel-line { height: 13px; margin-bottom: 8px; }
+    .skel-line.w-60 { width: 60%; }
+    .skel-line.w-80 { width: 80%; }
+    .skel-line.w-40 { width: 40%; }
+    .skel-line.w-90 { width: 90%; }
+    @keyframes shimmer { to { background-position: -200% 0; } }
+
+    /* ── Copy toast ── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border-focus);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 10px 18px;
+      border-radius: 8px;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+      z-index: 100;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    /* ── Divider ── */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 32px 0;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-tag">AI-Powered</div>
+    <h1>Product Spec<br /><span>Generator</span></h1>
+    <p class="header-sub">Turn a feature idea into a full PRD in seconds.</p>
+  </div>
+
+  <!-- API Key -->
+  <div class="api-key-row">
+    <div class="lock-icon">🔒</div>
+    <div class="api-key-info">
+      <div class="api-key-label">Anthropic API Key</div>
+      <div class="api-key-input-wrap">
+        <input class="api-key-input" id="apiKey" type="password" placeholder="sk-ant-api03-…" autocomplete="off" spellcheck="false" />
+        <button class="toggle-vis" id="toggleVis" title="Toggle visibility" aria-label="Toggle API key visibility">👁</button>
+      </div>
+      <div class="api-key-note">🔐 Your key is never stored — it's only used in-browser for the API call.</div>
+    </div>
+  </div>
+
+  <!-- Form -->
+  <div class="form-card">
+    <div class="form-section-title">Spec Details</div>
+
+    <div class="field">
+      <label for="featureIdea">Feature idea <span class="req">*</span></label>
+      <textarea id="featureIdea" placeholder="Describe the feature or product you want to spec out…" rows="4"></textarea>
+    </div>
+
+    <div class="two-col">
+      <div class="field">
+        <label for="productType">Product type</label>
+        <select id="productType">
+          <option value="B2B SaaS">B2B SaaS</option>
+          <option value="FinTech platform">FinTech platform</option>
+          <option value="Consumer mobile app">Consumer mobile app</option>
+          <option value="Enterprise software">Enterprise software</option>
+          <option value="Developer tool">Developer tool</option>
+          <option value="Marketplace">Marketplace</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="targetUsers">Target users</label>
+        <input type="text" id="targetUsers" placeholder="e.g. startup founders, ops teams" />
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="field">
+        <label for="businessGoal">Business goal</label>
+        <input type="text" id="businessGoal" placeholder="e.g. reduce churn by 15%" />
+      </div>
+      <div class="field">
+        <label for="constraints">Constraints / notes</label>
+        <input type="text" id="constraints" placeholder="e.g. must ship in 2 weeks, no new infra" />
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-generate" id="generateBtn" onclick="generatePRD()">
+    <div class="spinner" id="spinner"></div>
+    <span id="btnLabel">Generate PRD ✦</span>
+  </button>
+
+  <div class="error-box" id="errorBox"></div>
+
+  <!-- Loading skeleton -->
+  <div id="loading-state">
+    <hr class="divider" />
+    <div style="margin-bottom:24px">
+      <div class="skel skel-line w-40" style="height:18px;margin-bottom:6px;"></div>
+    </div>
+    <div class="skeleton-section" style="margin-bottom:14px">
+      <div class="skel skel-line w-60" style="margin-bottom:14px;"></div>
+      <div class="skel skel-line w-90"></div>
+      <div class="skel skel-line w-80"></div>
+      <div class="skel skel-line w-60"></div>
+    </div>
+    <div class="skeleton-section" style="margin-bottom:14px">
+      <div class="skel skel-line w-40" style="margin-bottom:14px;"></div>
+      <div class="skel skel-line w-80"></div>
+      <div class="skel skel-line w-90"></div>
+    </div>
+    <div class="skeleton-section">
+      <div class="skel skel-line w-50" style="margin-bottom:14px;"></div>
+      <div class="skel skel-line w-80"></div>
+      <div class="skel skel-line w-60"></div>
+      <div class="skel skel-line w-40"></div>
+    </div>
+  </div>
+
+  <!-- Output -->
+  <div id="output">
+    <hr class="divider" />
+    <div class="output-header">
+      <div class="output-title">Generated PRD</div>
+      <div class="output-actions">
+        <button class="btn-sm primary-sm" onclick="copyMarkdown()">⬇ Copy as Markdown</button>
+        <button class="btn-sm" onclick="startNew()">↺ Start new spec</button>
+      </div>
+    </div>
+    <div id="prd-sections"></div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">Copied to clipboard!</div>
+
+<script>
+  // ── Toggle API key visibility ──
+  document.getElementById('toggleVis').addEventListener('click', () => {
+    const inp = document.getElementById('apiKey');
+    inp.type = inp.type === 'password' ? 'text' : 'password';
+  });
+
+  // ── Section config ──
+  const SECTIONS = [
+    { key: 'tldr',       icon: '⚡', label: "TL;DR" },
+    { key: 'problem',    icon: '🎯', label: "Problem Statement" },
+    { key: 'solution',   icon: '💡', label: "Solution" },
+    { key: 'stories',    icon: '👤', label: "User Stories (STAR format)" },
+    { key: 'acceptance', icon: '✅', label: "Acceptance Criteria" },
+    { key: 'outscope',   icon: '🚫', label: "Out of Scope" },
+    { key: 'metrics',    icon: '📊', label: "Success Metrics" },
+    { key: 'risks',      icon: '⚠️',  label: "Risks" },
+    { key: 'timeline',   icon: '📅', label: "Rough Timeline" },
+  ];
+
+  // ── Build prompt ──
+  function buildPrompt(idea, type, users, goal, constraints) {
+    return `You are a senior product manager. Generate a detailed Product Requirements Document (PRD) for the following feature/product.
+
+Feature idea: ${idea}
+Product type: ${type}
+Target users: ${users || 'Not specified'}
+Business goal: ${goal || 'Not specified'}
+Constraints / notes: ${constraints || 'None'}
+
+Return your response as a JSON object with exactly these keys:
+- tldr: A 2-3 sentence executive summary.
+- problem: A clear problem statement (2-4 sentences, explain the pain point and who feels it).
+- solution: How this feature/product solves the problem (3-5 sentences).
+- stories: An array of 3-4 user story objects, each with: { situation, task, action, result } (STAR format). Return as an array of objects.
+- acceptance: An array of 5-8 specific, testable acceptance criteria strings.
+- outscope: An array of 4-6 things explicitly NOT included in this spec.
+- metrics: An array of success metric objects, each with: { metric, target, priority } where priority is "high", "medium", or "low".
+- risks: An array of 3-5 risk strings (include likelihood and mitigation in each string).
+- timeline: A string describing a rough phased timeline (use phases like Phase 1, Phase 2 etc.).
+
+Return ONLY valid JSON. No markdown fences, no extra text.`;
+  }
+
+  // ── Simple markdown parser for section bodies ──
+  function md(text) {
+    if (!text) return '';
+    return text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\n/g, '<br/>');
+  }
+
+  // ── Priority tag ──
+  function priorityTag(p) {
+    const map = { high: 'tag-high', medium: 'tag-medium', low: 'tag-low' };
+    return `<span class="tag ${map[p] || 'tag-low'}">${p}</span>`;
+  }
+
+  // ── Render PRD ──
+  function renderPRD(data) {
+    const container = document.getElementById('prd-sections');
+    container.innerHTML = '';
+
+    const renderers = {
+      tldr:       (d) => `<div class="section-body"><p>${md(d.tldr)}</p></div>`,
+      problem:    (d) => `<div class="section-body"><p>${md(d.problem)}</p></div>`,
+      solution:   (d) => `<div class="section-body"><p>${md(d.solution)}</p></div>`,
+      stories:    (d) => {
+        const items = (d.stories || []).map(s =>
+          `<li><strong>Situation:</strong> ${md(s.situation)}<br/>
+           <strong>Task:</strong> ${md(s.task)}<br/>
+           <strong>Action:</strong> ${md(s.action)}<br/>
+           <strong>Result:</strong> ${md(s.result)}</li>`
+        ).join('');
+        return `<div class="section-body"><ul>${items}</ul></div>`;
+      },
+      acceptance: (d) => {
+        const items = (d.acceptance || []).map((c, i) => `<li>${md(c)}</li>`).join('');
+        return `<div class="section-body"><ol>${items}</ol></div>`;
+      },
+      outscope:   (d) => {
+        const items = (d.outscope || []).map(c => `<li>${md(c)}</li>`).join('');
+        return `<div class="section-body"><ul>${items}</ul></div>`;
+      },
+      metrics:    (d) => {
+        const items = (d.metrics || []).map(m =>
+          `<li><strong>${md(m.metric)}</strong>${priorityTag(m.priority)} — ${md(m.target)}</li>`
+        ).join('');
+        return `<div class="section-body"><ul>${items}</ul></div>`;
+      },
+      risks:      (d) => {
+        const items = (d.risks || []).map(r => `<li>${md(r)}</li>`).join('');
+        return `<div class="section-body"><ul>${items}</ul></div>`;
+      },
+      timeline:   (d) => `<div class="section-body"><p>${md(d.timeline)}</p></div>`,
+    };
+
+    SECTIONS.forEach(sec => {
+      const html = renderers[sec.key] ? renderers[sec.key](data) : '';
+      const div = document.createElement('div');
+      div.className = 'prd-section';
+      div.dataset.key = sec.key;
+      div.innerHTML = `
+        <div class="prd-section-head">
+          <div class="section-icon">${sec.icon}</div>
+          <div class="section-label">${sec.label}</div>
+        </div>
+        ${html}`;
+      container.appendChild(div);
+    });
+  }
+
+  // ── Generate PRD ──
+  async function generatePRD() {
+    const apiKey     = document.getElementById('apiKey').value.trim();
+    const featureIdea = document.getElementById('featureIdea').value.trim();
+    const productType = document.getElementById('productType').value;
+    const targetUsers = document.getElementById('targetUsers').value.trim();
+    const businessGoal = document.getElementById('businessGoal').value.trim();
+    const constraints  = document.getElementById('constraints').value.trim();
+
+    const errorBox = document.getElementById('errorBox');
+    errorBox.textContent = '';
+    errorBox.classList.remove('visible');
+
+    if (!apiKey) {
+      showError('Please enter your Anthropic API key to continue.');
+      return;
+    }
+    if (!featureIdea) {
+      showError('Please describe your feature idea before generating.');
+      return;
+    }
+
+    setLoading(true);
+    document.getElementById('output').classList.remove('visible');
+
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 4096,
+          messages: [{
+            role: 'user',
+            content: buildPrompt(featureIdea, productType, targetUsers, businessGoal, constraints),
+          }],
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData?.error?.message || `API error ${response.status}`);
+      }
+
+      const data = await response.json();
+      const rawText = data?.content?.[0]?.text || '';
+
+      let parsed;
+      try {
+        parsed = JSON.parse(rawText);
+      } catch {
+        // Attempt to extract JSON from any surrounding text
+        const match = rawText.match(/\{[\s\S]*\}/);
+        if (!match) throw new Error('Could not parse the response from Claude. Please try again.');
+        parsed = JSON.parse(match[0]);
+      }
+
+      // Store for markdown export
+      window._lastPRD = { data: parsed, meta: { featureIdea, productType, targetUsers, businessGoal, constraints } };
+
+      renderPRD(parsed);
+      setLoading(false);
+      document.getElementById('output').classList.add('visible');
+      document.getElementById('output').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    } catch (err) {
+      setLoading(false);
+      showError(err.message || 'Something went wrong. Please check your API key and try again.');
+    }
+  }
+
+  // ── Helpers ──
+  function setLoading(on) {
+    const btn = document.getElementById('generateBtn');
+    const lbl = document.getElementById('btnLabel');
+    const loading = document.getElementById('loading-state');
+    btn.disabled = on;
+    btn.classList.toggle('generating', on);
+    lbl.textContent = on ? 'Generating…' : 'Generate PRD ✦';
+    loading.classList.toggle('visible', on);
+    if (on) loading.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function showError(msg) {
+    const errorBox = document.getElementById('errorBox');
+    errorBox.textContent = '⚠ ' + msg;
+    errorBox.classList.add('visible');
+  }
+
+  // ── Copy as Markdown ──
+  function copyMarkdown() {
+    if (!window._lastPRD) return;
+    const { data, meta } = window._lastPRD;
+
+    const lines = [
+      `# Product Requirements Document`,
+      ``,
+      `**Feature:** ${meta.featureIdea}`,
+      `**Product type:** ${meta.productType}`,
+      meta.targetUsers ? `**Target users:** ${meta.targetUsers}` : '',
+      meta.businessGoal ? `**Business goal:** ${meta.businessGoal}` : '',
+      meta.constraints  ? `**Constraints:** ${meta.constraints}` : '',
+      ``,
+      `---`,
+      ``,
+      `## ⚡ TL;DR`,
+      ``,
+      data.tldr || '',
+      ``,
+      `## 🎯 Problem Statement`,
+      ``,
+      data.problem || '',
+      ``,
+      `## 💡 Solution`,
+      ``,
+      data.solution || '',
+      ``,
+      `## 👤 User Stories (STAR Format)`,
+      ``,
+      ...(data.stories || []).map((s, i) =>
+        `### Story ${i + 1}\n- **Situation:** ${s.situation}\n- **Task:** ${s.task}\n- **Action:** ${s.action}\n- **Result:** ${s.result}`
+      ),
+      ``,
+      `## ✅ Acceptance Criteria`,
+      ``,
+      ...(data.acceptance || []).map((c, i) => `${i + 1}. ${c}`),
+      ``,
+      `## 🚫 Out of Scope`,
+      ``,
+      ...(data.outscope || []).map(c => `- ${c}`),
+      ``,
+      `## 📊 Success Metrics`,
+      ``,
+      ...(data.metrics || []).map(m => `- **${m.metric}** [${(m.priority || '').toUpperCase()}] — ${m.target}`),
+      ``,
+      `## ⚠️ Risks`,
+      ``,
+      ...(data.risks || []).map(r => `- ${r}`),
+      ``,
+      `## 📅 Rough Timeline`,
+      ``,
+      data.timeline || '',
+      ``,
+      `---`,
+      `*Generated with Product Spec Generator*`,
+    ].filter(l => l !== null && l !== undefined);
+
+    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+      const toast = document.getElementById('toast');
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2400);
+    }).catch(() => {
+      showError('Could not copy to clipboard. Please select the text manually.');
+    });
+  }
+
+  // ── Start new spec ──
+  function startNew() {
+    document.getElementById('output').classList.remove('visible');
+    document.getElementById('loading-state').classList.remove('visible');
+    document.getElementById('errorBox').classList.remove('visible');
+    document.getElementById('featureIdea').value = '';
+    document.getElementById('targetUsers').value = '';
+    document.getElementById('businessGoal').value = '';
+    document.getElementById('constraints').value = '';
+    document.getElementById('productType').selectedIndex = 0;
+    window._lastPRD = null;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    document.getElementById('featureIdea').focus();
+  }
+
+  // ── Enter key on inputs ──
+  document.querySelectorAll('input[type="text"], select').forEach(el => {
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter') generatePRD();
+    });
+  });
+</script>
+</body>
+</html>
