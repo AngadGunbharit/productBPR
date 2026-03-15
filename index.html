@@ -685,6 +685,9 @@
       white-space: pre-wrap; word-break: break-all; text-align: left;
     }
     .modal-diagram-error.hidden { display: none; }
+    .modal-diagram-wrap.hidden { display: none; }
+    /* Ensure modal body has a minimum height while loading */
+    .modal-loader, .modal-diagram-wrap, .modal-diagram-error { min-height: 420px; }
   </style>
 </head>
 <body>
