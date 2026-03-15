@@ -456,6 +456,120 @@
       display: none;
     }
     .diagram-error.visible { display: block; }
+
+    /* ── Diagram preview modal ── */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.82);
+      backdrop-filter: blur(4px);
+      z-index: 200;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      width: 100%;
+      max-width: 1040px;
+      max-height: calc(100vh - 40px);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .modal-title {
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .modal-title-icon {
+      background: rgba(255,171,64,0.12);
+      border: 1px solid rgba(255,171,64,0.25);
+      border-radius: 6px;
+      width: 26px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+    }
+    .modal-actions { display: flex; gap: 8px; align-items: center; }
+    .btn-modal-dl {
+      background: #ffab40;
+      border: none;
+      border-radius: 7px;
+      color: #0d0d0d;
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 7px 16px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn-modal-dl:hover { opacity: 0.85; }
+    .btn-modal-close {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text-muted);
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 7px 14px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-modal-close:hover { border-color: var(--text-muted); color: var(--text); }
+    .modal-iframe-wrap {
+      flex: 1;
+      position: relative;
+      min-height: 0;
+      background: #f9f9f9;
+    }
+    .modal-iframe-wrap iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+      min-height: 560px;
+    }
+    .modal-loader {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #f9f9f9;
+      gap: 12px;
+      font-size: 13px;
+      color: #888;
+      font-family: var(--font);
+    }
+    .modal-loader .ml-spinner {
+      width: 28px;
+      height: 28px;
+      border: 3px solid rgba(255,171,64,0.2);
+      border-top-color: #ffab40;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    .modal-loader.hidden { display: none; }
   </style>
 </head>
 <body>
@@ -571,6 +685,29 @@
     <div id="prd-sections"></div>
   </div>
 
+</div>
+
+<!-- Diagram preview modal -->
+<div class="modal-backdrop" id="previewModal" onclick="handleBackdropClick(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">
+        <div class="modal-title-icon">⬡</div>
+        Draw.io Diagram Preview
+      </div>
+      <div class="modal-actions">
+        <button class="btn-modal-dl" onclick="downloadCurrentDiagram()">⬇ Download .drawio</button>
+        <button class="btn-modal-close" onclick="closePreview()">✕ Close</button>
+      </div>
+    </div>
+    <div class="modal-iframe-wrap">
+      <div class="modal-loader" id="modalLoader">
+        <div class="ml-spinner"></div>
+        <span>Loading diagram preview…</span>
+      </div>
+      <iframe id="previewFrame" title="Draw.io diagram preview"></iframe>
+    </div>
+  </div>
 </div>
 
 <!-- Toast -->
@@ -873,7 +1010,7 @@ Return ONLY valid JSON. No markdown fences, no extra text.`;
     });
   });
 
-  // ── Export as Draw.io ──
+  // ── Export as Draw.io (generates XML then shows preview modal) ──
   async function exportDrawio() {
     if (!window._lastPRD) return;
     const apiKey = document.getElementById('apiKey').value.trim();
@@ -959,13 +1096,14 @@ Return ONLY the raw draw.io XML starting with <mxfile and ending with </mxfile>.
         throw new Error('The diagram response was not valid draw.io XML. Please try again.');
       }
 
-      // Derive a safe filename from the feature idea
+      // Derive filename and store XML for download button
       const slug = (meta.featureIdea || 'diagram')
         .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
-      downloadFile(xml, `${slug}.drawio`, 'application/xml');
+      window._currentDiagram = { xml, filename: `${slug}.drawio` };
 
-      // Success feedback
-      showToast('Draw.io file downloaded!');
+      // Show preview modal
+      openPreview(xml);
+
     } catch (err) {
       showDiagramError(err.message || 'Could not generate the diagram. Please try again.');
     } finally {
@@ -973,6 +1111,61 @@ Return ONLY the raw draw.io XML starting with <mxfile and ending with </mxfile>.
       btn.classList.remove('loading');
       lbl.textContent = 'Export as Draw.io';
     }
+  }
+
+  // ── Preview modal ──
+  function openPreview(xml) {
+    const modal = document.getElementById('previewModal');
+    const loader = document.getElementById('modalLoader');
+    const iframe = document.getElementById('previewFrame');
+
+    modal.classList.add('open');
+    loader.classList.remove('hidden');
+    iframe.src = '';
+
+    // Listen for the viewer's init signal, then send the XML
+    let initReceived = false;
+    function onMessage(e) {
+      if (initReceived) return;
+      try {
+        const msg = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+        if (msg && msg.event === 'init') {
+          initReceived = true;
+          loader.classList.add('hidden');
+          iframe.contentWindow.postMessage(
+            JSON.stringify({ action: 'load', xml }),
+            'https://viewer.diagrams.net'
+          );
+          window.removeEventListener('message', onMessage);
+        }
+      } catch (_) {}
+    }
+    window.addEventListener('message', onMessage);
+
+    // Load viewer — it will fire 'init' when ready
+    iframe.src = 'https://viewer.diagrams.net/?spin=1&toolbar=0&chrome=0&nav=0';
+
+    // Fallback: hide loader after 8s if init never fires (e.g. CSP/network)
+    setTimeout(() => loader.classList.add('hidden'), 8000);
+  }
+
+  function closePreview() {
+    const modal = document.getElementById('previewModal');
+    const iframe = document.getElementById('previewFrame');
+    modal.classList.remove('open');
+    // Reset iframe so it doesn't keep the viewer alive
+    setTimeout(() => { iframe.src = ''; }, 300);
+  }
+
+  function handleBackdropClick(e) {
+    if (e.target === document.getElementById('previewModal')) closePreview();
+  }
+
+  function downloadCurrentDiagram() {
+    if (!window._currentDiagram) return;
+    const { xml, filename } = window._currentDiagram;
+    downloadFile(xml, filename, 'application/xml');
+    showToast('Draw.io file downloaded!');
   }
 
   function downloadFile(content, filename, mimeType) {
